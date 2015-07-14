@@ -1,19 +1,27 @@
 """Tools to work with Beaker (https://beaker-project.org/).
 
-Note that you need `bkr` command available (comes from beaker-client package)
-and configured. See:
+The ``bkr`` command-line utility must be available and configured. (Available
+via the ``beaker-client`` package on Fedora.) See the `Installing and
+configuring the client`_ section of the Beaker documentation.
 
-https://beaker-project.org/docs/user-guide/bkr-client.html#installing-and-configuring-the-client
+.. _Installing and configuring the client:
+    https://beaker-project.org/docs/user-guide/bkr-client.html#installing-and-configuring-the-client
+
 """
-
+import pprint
 import subprocess
 import xml.dom.minidom
+
+
+def main():
+    """Run :func:`beaker_jobid_to_system_info` and print the response."""
+    pprint.pprint(beaker_jobid_to_system_info(open('a.xml')))
 
 
 def _beaker_process_recipe(recipe):
     """Process recipe and return info about it
 
-    :param str recipe: recipe (or guestrecipe) element to process
+    :param recipe: recipe (or guestrecipe) element to process
 
     """
     recipe_info = {}
@@ -24,53 +32,56 @@ def _beaker_process_recipe(recipe):
     recipe_info['arch'] = recipe.attributes['arch'].value
     recipe_info['distro'] = recipe.attributes['distro'].value
     recipe_info['variant'] = recipe.attributes['variant'].value
+
     # Do we have /distribution/reservesys? If so, status is based on that.
-    tasks = recipe.getElementsByTagName("task")
+    tasks = recipe.getElementsByTagName('task')
     for task in reversed(tasks):
         if task.attributes['name'].value == '/distribution/reservesys':
             res_task = task
             break
+
     # Do we have <reservesys>? If so, status is recipe.status.
-    reservesyss = recipe.getElementsByTagName("reservesys")
-    for reservesys in reservesyss:
+    reservesyss = recipe.getElementsByTagName('reservesys')
+    for _ in reservesyss:
         res_tag = True
         break
+
     # Determine status of the recipe/system reservation
     if res_tag and not res_task:
         recipe_info['reservation'] = recipe.attributes['status'].value
     elif res_task and not res_tag:
         recipe_info['reservation'] = res_task.attributes['status'].value
     elif res_task and res_tag:
-        recipe_info['reservation'] = "ERROR: Looks like the recipe " + \
-                                     "for this system have too many " + \
-                                     "methods to reserve. Do not know " + \
-                                     "what happens."
+        recipe_info['reservation'] = (
+            'ERROR: Looks like the recipe for this system have too many '
+            'methods to reserve. Do not know what happens.'
+        )
     else:
         recipe_info['reservation'] = recipe.attributes['status'].value
     return recipe_info
 
 
-def beaker_jobid_to_system_info(jobID):
+def beaker_jobid_to_system_info(job_id):
     """Get system reservation task status (plus other info) based on
-    Beaker jobID.
+    Beaker ``job_id``.
 
     This function requires configured bkr utility. We parse everithing from
-    `bkr job-results [--prettyxml] J:123456`, so if you see some breakage,
+    ``bkr job-results [--prettyxml] J:123456``, so if you see some breakage,
     please capture that output.
 
-    For testing putposes, if you provide file descriptor instead of jobID,
+    For testing putposes, if you provide file descriptor instead of ``job_id``,
     XML will be loaded from there.
 
-    :param str jobID: ID of a Beaker job (e.g. 'J:123456')
+    :param job_id: The ID of a Beaker job. For example: 'J:123456'
 
     """
     systems = []
 
     # Get TML with job results and create DOM object
-    if hasattr(jobID, 'read'):
-        dom = xml.dom.minidom.parse(jobID)
+    if hasattr(job_id, 'read'):
+        dom = xml.dom.minidom.parse(job_id)
     else:
-        out = subprocess.check_output(['bkr', 'job-results', jobID])
+        out = subprocess.check_output(['bkr', 'job-results', job_id])
         dom = xml.dom.minidom.parseString(out)
 
     # Parse the DOM object. The XML have structure like this (all elements
@@ -85,18 +96,18 @@ def beaker_jobid_to_system_info(jobID):
     #     </recipeSet>
     #     <recipeSet id='457' ...
     #       ...
-    jobs = dom.getElementsByTagName("job")
+    jobs = dom.getElementsByTagName('job')
     for job in jobs:
-        recipeSets = job.getElementsByTagName("recipeSet")
-        for recipeSet in recipeSets:
-            recipes = recipeSet.getElementsByTagName("recipe")
+        recipe_sets = job.getElementsByTagName('recipeSet')
+        for recipe_set in recipe_sets:
+            recipes = recipe_set.getElementsByTagName('recipe')
             for recipe in recipes:
                 systems.append(_beaker_process_recipe(recipe))
-                guestrecipes = recipe.getElementsByTagName("guestrecipe")
+                guestrecipes = recipe.getElementsByTagName('guestrecipe')
                 for guestrecipe in guestrecipes:
                     systems.append(_beaker_process_recipe(guestrecipe))
     return systems
 
-if __name__ == "__main__":
-    import pprint
-    pprint.pprint(beaker_jobid_to_system_info(open('a.xml')))
+
+if __name__ == '__main__':
+    main()
