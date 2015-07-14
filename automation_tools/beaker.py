@@ -9,6 +9,7 @@ https://beaker-project.org/docs/user-guide/bkr-client.html#installing-and-config
 import subprocess
 import xml.dom.minidom
 
+
 def _beaker_process_recipe(recipe):
     """Process recipe and return info about it
 
@@ -40,10 +41,14 @@ def _beaker_process_recipe(recipe):
     elif res_task and not res_tag:
         recipe_info['reservation'] = res_task.attributes['status'].value
     elif res_task and res_tag:
-        recipe_info['reservation'] = "ERROR: Looks like the recipe for this system have too many methods to reserve. Do not know what happens."
+        recipe_info['reservation'] = "ERROR: Looks like the recipe " + \
+                                     "for this system have too many " + \
+                                     "methods to reserve. Do not know " + \
+                                     "what happens."
     else:
         recipe_info['reservation'] = recipe.attributes['status'].value
     return recipe_info
+
 
 def beaker_jobid_to_system_info(jobID):
     """Get system reservation task status (plus other info) based on
@@ -65,25 +70,25 @@ def beaker_jobid_to_system_info(jobID):
     if hasattr(jobID, 'read'):
         dom = xml.dom.minidom.parse(jobID)
     else:
-        out = subprocess.check_output(['bkr', 'job-results', '--prettyxml', jobID])
+        out = subprocess.check_output(['bkr', 'job-results', jobID])
         dom = xml.dom.minidom.parseString(out)
 
     # Parse the DOM object. The XML have structure like this (all elements
     # except '<job>' can appear more times):
     #   <job id='123' ...
     #     <recipeSet id='456' ...
-    #       <recipe id='789' system='some.system.example.com' status='Reserved' ...
-    #       <recipe id='790' system='another.system.example.com' status='Completed' ...
+    #       <recipe id='789' system='some.system.example.com'
+    #         status='Reserved' ...
+    #       <recipe id='790' system='another.system.example.com'
+    #         status='Completed' ...
     #         <guestrecipe id='147258' ...
     #     </recipeSet>
     #     <recipeSet id='457' ...
     #       ...
     jobs = dom.getElementsByTagName("job")
     for job in jobs:
-        jobID = int(job.attributes['id'].value)
         recipeSets = job.getElementsByTagName("recipeSet")
         for recipeSet in recipeSets:
-            recipeSetID = int(recipeSet.attributes['id'].value)
             recipes = recipeSet.getElementsByTagName("recipe")
             for recipe in recipes:
                 systems.append(_beaker_process_recipe(recipe))
